@@ -1,0 +1,865 @@
+local BIOSCreator = {}
+
+function BIOSCreator.create(config)
+    config = config or {}
+    
+    -- Main GUI and references
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "BIOSScreen"
+    screenGui.IgnoreGuiInset = true
+    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    
+    -- Determine parent based on environment
+    if game:GetService("RunService"):IsStudio() then
+        screenGui.Parent = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+    else
+        screenGui.Parent = game:GetService("CoreGui")
+    end
+    
+    -- Create main background
+    local background = Instance.new("Frame")
+    background.Name = "Background"
+    background.Size = UDim2.new(1, 0, 1, 0)
+    background.BackgroundColor3 = Color3.fromRGB(0, 0, 128) -- Dark blue background
+    background.BorderSizePixel = 0
+    background.Parent = screenGui
+    
+    -- Create header bar
+    local headerBar = Instance.new("Frame")
+    headerBar.Name = "HeaderBar"
+    headerBar.Size = UDim2.new(1, 0, 0, 24)
+    headerBar.Position = UDim2.new(0, 0, 0, 0)
+    headerBar.BackgroundColor3 = Color3.fromRGB(0, 0, 180)
+    headerBar.BorderSizePixel = 0
+    headerBar.Parent = background
+    
+    -- Header text
+    local headerText = Instance.new("TextLabel")
+    headerText.Name = "HeaderText"
+    headerText.Size = UDim2.new(1, 0, 1, 0)
+    headerText.BackgroundTransparency = 1
+    headerText.Font = Enum.Font.Code
+    headerText.TextSize = 18
+    headerText.TextColor3 = Color3.fromRGB(255, 255, 0)
+    headerText.Text = config.headerText or "BIOS Setup Utility"
+    headerText.TextXAlignment = Enum.TextXAlignment.Left
+    headerText.Parent = headerBar
+    
+    -- Create tabs bar
+    local tabsBar = Instance.new("Frame")
+    tabsBar.Name = "TabsBar"
+    tabsBar.Size = UDim2.new(1, 0, 0, 24)
+    tabsBar.Position = UDim2.new(0, 0, 0, 24)
+    tabsBar.BackgroundColor3 = Color3.fromRGB(0, 0, 180)
+    tabsBar.BorderSizePixel = 0
+    tabsBar.Parent = background
+    
+    -- Create content area
+    local contentArea = Instance.new("Frame")
+    contentArea.Name = "ContentArea"
+    contentArea.Size = UDim2.new(1, 0, 1, -72)
+    contentArea.Position = UDim2.new(0, 0, 0, 48)
+    contentArea.BackgroundColor3 = Color3.fromRGB(0, 0, 128)
+    contentArea.BorderSizePixel = 0
+    contentArea.Parent = background
+    
+    -- Create footer bar
+    local footerBar = Instance.new("Frame")
+    footerBar.Name = "FooterBar"
+    footerBar.Size = UDim2.new(1, 0, 0, 24)
+    footerBar.Position = UDim2.new(0, 0, 1, -24)
+    footerBar.BackgroundColor3 = Color3.fromRGB(0, 0, 180)
+    footerBar.BorderSizePixel = 0
+    footerBar.Parent = background
+    
+    -- Footer text with keys
+    local footerText = Instance.new("TextLabel")
+    footerText.Name = "FooterText"
+    footerText.Size = UDim2.new(1, 0, 1, 0)
+    footerText.BackgroundTransparency = 1
+    footerText.Font = Enum.Font.Code
+    footerText.TextSize = 16
+    footerText.TextColor3 = Color3.fromRGB(255, 255, 0)
+    footerText.Text = config.footerText or "↑↓:Select Item  Enter:Select  +/-:Change Values  F9:Setup Defaults  F10:Save and Exit"
+    footerText.TextXAlignment = Enum.TextXAlignment.Left
+    footerText.Parent = footerBar
+    
+    -- Create the tab system
+    local tabSystem = {
+        tabs = {},
+        currentTab = nil,
+        tabContents = {},
+        elements = {} -- Store references to all UI elements for updating
+    }
+    
+    -- Function to create a new tab
+    local function createTab(name)
+        local tabButton = Instance.new("TextButton")
+        tabButton.Name = name.."Tab"
+        tabButton.Size = UDim2.new(0, 100, 1, 0)
+        tabButton.BackgroundColor3 = Color3.fromRGB(0, 0, 180)
+        tabButton.BorderSizePixel = 1
+        tabButton.BorderColor3 = Color3.fromRGB(255, 255, 0)
+        tabButton.Font = Enum.Font.Code
+        tabButton.TextSize = 16
+        tabButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        tabButton.Text = name
+        
+        local contentFrame = Instance.new("ScrollingFrame")
+        contentFrame.Name = name.."Content"
+        contentFrame.Size = UDim2.new(1, -20, 1, -20)
+        contentFrame.Position = UDim2.new(0, 10, 0, 10)
+        contentFrame.BackgroundTransparency = 1
+        contentFrame.BorderSizePixel = 0
+        contentFrame.ScrollBarThickness = 6
+        contentFrame.ScrollingDirection = Enum.ScrollingDirection.Y
+        contentFrame.CanvasSize = UDim2.new(0, 0, 0, 0) -- Will be updated as items are added
+        contentFrame.Visible = false
+        contentFrame.Parent = contentArea
+        
+        -- Position tab based on number of existing tabs
+        local tabIndex = #tabSystem.tabs + 1
+        tabButton.Position = UDim2.new(0, (tabIndex-1) * 100, 0, 0)
+        tabButton.Parent = tabsBar
+        
+        tabButton.MouseButton1Click:Connect(function()
+            for _, tab in pairs(tabSystem.tabs) do
+                tab.button.BackgroundColor3 = Color3.fromRGB(0, 0, 180)
+                tabSystem.tabContents[tab.name].Visible = false
+            end
+            tabButton.BackgroundColor3 = Color3.fromRGB(0, 0, 80)
+            contentFrame.Visible = true
+            tabSystem.currentTab = name
+            
+            -- Close any open dropdowns when switching tabs
+            for _, element in pairs(tabSystem.elements) do
+                if element.type == "dropdown" and element.menu and element.menu.Visible then
+                    element.menu.Visible = false
+                end
+            end
+        end)
+        
+        table.insert(tabSystem.tabs, {name = name, button = tabButton})
+        tabSystem.tabContents[name] = contentFrame
+        
+        if tabIndex == 1 then
+            tabButton.BackgroundColor3 = Color3.fromRGB(0, 0, 80)
+            contentFrame.Visible = true
+            tabSystem.currentTab = name
+        end
+        
+        -- Initialize elements table for this tab
+        tabSystem.elements[name] = {}
+        
+        return contentFrame
+    end
+    
+    -- Utility functions for creating UI elements
+    local function createLabel(parent, text, yPosition)
+        local label = Instance.new("TextLabel")
+        label.Name = "Label_" .. text:gsub(" ", "")
+        label.Size = UDim2.new(1, -20, 0, 30)
+        label.Position = UDim2.new(0, 0, 0, yPosition)
+        label.BackgroundTransparency = 1
+        label.Font = Enum.Font.Code
+        label.TextSize = 16
+        label.TextColor3 = Color3.fromRGB(0, 255, 255)
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Text = text
+        label.Parent = parent
+        
+        return label
+    end
+    
+    local function createSetting(parent, name, value, yPosition, tabName)
+        local settingFrame = Instance.new("Frame")
+        settingFrame.Name = name:gsub(" ", "") .. "Setting"
+        settingFrame.Size = UDim2.new(1, -20, 0, 30)
+        settingFrame.Position = UDim2.new(0, 0, 0, yPosition)
+        settingFrame.BackgroundTransparency = 1
+        settingFrame.Parent = parent
+        
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Name = "NameLabel"
+        nameLabel.Size = UDim2.new(0.4, 0, 1, 0)
+        nameLabel.Position = UDim2.new(0, 0, 0, 0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Font = Enum.Font.Code
+        nameLabel.TextSize = 16
+        nameLabel.TextColor3 = Color3.fromRGB(0, 255, 255)
+        nameLabel.Text = name
+        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        nameLabel.Parent = settingFrame
+        
+        local valueLabel = Instance.new("TextLabel")
+        valueLabel.Name = "ValueLabel"
+        valueLabel.Size = UDim2.new(0.55, 0, 1, 0)
+        valueLabel.Position = UDim2.new(0.45, 0, 0, 0)
+        valueLabel.BackgroundTransparency = 1
+        valueLabel.Font = Enum.Font.Code
+        valueLabel.TextSize = 16
+        valueLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        valueLabel.Text = value
+        valueLabel.TextXAlignment = Enum.TextXAlignment.Left
+        valueLabel.Parent = settingFrame
+        
+        -- Store reference for updating
+        if tabName then
+            tabSystem.elements[tabName][name] = {
+                type = "setting",
+                frame = settingFrame,
+                nameLabel = nameLabel,
+                valueLabel = valueLabel
+            }
+        end
+        
+        return settingFrame, valueLabel
+    end
+    
+    local function createButton(parent, name, yPosition, callback, tabName)
+        local button = Instance.new("TextButton")
+        button.Name = name:gsub(" ", "") .. "Button"
+        button.Size = UDim2.new(0.4, 0, 0, 30)
+        button.Position = UDim2.new(0.3, 0, 0, yPosition)
+        button.BackgroundColor3 = Color3.fromRGB(0, 0, 180)
+        button.BorderColor3 = Color3.fromRGB(255, 255, 0)
+        button.Font = Enum.Font.Code
+        button.TextSize = 16
+        button.TextColor3 = Color3.fromRGB(255, 255, 255)
+        button.Text = name
+        button.Parent = parent
+        
+        button.MouseEnter:Connect(function()
+            button.BackgroundColor3 = Color3.fromRGB(0, 0, 220)
+        end)
+        
+        button.MouseLeave:Connect(function()
+            button.BackgroundColor3 = Color3.fromRGB(0, 0, 180)
+        end)
+        
+        if callback then
+            button.MouseButton1Click:Connect(callback)
+        end
+        
+        -- Store reference for updating
+        if tabName then
+            tabSystem.elements[tabName][name] = {
+                type = "button",
+                button = button
+            }
+        end
+        
+        return button
+    end
+    
+    local function createToggle(parent, name, initialValue, yPosition, callback, tabName)
+        local settingFrame = Instance.new("Frame")
+        settingFrame.Name = name:gsub(" ", "") .. "Toggle"
+        settingFrame.Size = UDim2.new(1, -20, 0, 30)
+        settingFrame.Position = UDim2.new(0, 0, 0, yPosition)
+        settingFrame.BackgroundTransparency = 1
+        settingFrame.Parent = parent
+        
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Name = "NameLabel"
+        nameLabel.Size = UDim2.new(0.4, 0, 1, 0)
+        nameLabel.Position = UDim2.new(0, 0, 0, 0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Font = Enum.Font.Code
+        nameLabel.TextSize = 16
+        nameLabel.TextColor3 = Color3.fromRGB(0, 255, 255)
+        nameLabel.Text = name
+        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        nameLabel.Parent = settingFrame
+        
+        local toggle = Instance.new("TextButton")
+        toggle.Name = "ToggleButton"
+        toggle.Size = UDim2.new(0.2, 0, 0.8, 0)
+        toggle.Position = UDim2.new(0.45, 0, 0.1, 0)
+        toggle.BackgroundColor3 = initialValue and Color3.fromRGB(0, 180, 0) or Color3.fromRGB(180, 0, 0)
+        toggle.BorderColor3 = Color3.fromRGB(255, 255, 0)
+        toggle.Font = Enum.Font.Code
+        toggle.TextSize = 14
+        toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+        toggle.Text = initialValue and "Enabled" or "Disabled"
+        toggle.Parent = settingFrame
+        
+        local isEnabled = initialValue
+        
+        toggle.MouseButton1Click:Connect(function()
+            isEnabled = not isEnabled
+            toggle.BackgroundColor3 = isEnabled and Color3.fromRGB(0, 180, 0) or Color3.fromRGB(180, 0, 0)
+            toggle.Text = isEnabled and "Enabled" or "Disabled"
+            
+            if callback then
+                callback(isEnabled)
+            end
+        end)
+        
+        -- Store reference for updating
+        if tabName then
+            tabSystem.elements[tabName][name] = {
+                type = "toggle",
+                frame = settingFrame,
+                nameLabel = nameLabel,
+                toggle = toggle,
+                getValue = function() return isEnabled end,
+                setValue = function(value)
+                    isEnabled = value
+                    toggle.BackgroundColor3 = isEnabled and Color3.fromRGB(0, 180, 0) or Color3.fromRGB(180, 0, 0)
+                    toggle.Text = isEnabled and "Enabled" or "Disabled"
+                end
+            }
+        end
+        
+        return settingFrame, toggle
+    end
+    
+    local function createSlider(parent, name, min, max, initial, yPosition, callback, tabName)
+        local settingFrame = Instance.new("Frame")
+        settingFrame.Name = name:gsub(" ", "") .. "Slider"
+        settingFrame.Size = UDim2.new(1, -20, 0, 30)
+        settingFrame.Position = UDim2.new(0, 0, 0, yPosition)
+        settingFrame.BackgroundTransparency = 1
+        settingFrame.Parent = parent
+        
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Name = "NameLabel"
+        nameLabel.Size = UDim2.new(0.4, 0, 1, 0)
+        nameLabel.Position = UDim2.new(0, 0, 0, 0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Font = Enum.Font.Code
+        nameLabel.TextSize = 16
+        nameLabel.TextColor3 = Color3.fromRGB(0, 255, 255)
+        nameLabel.Text = name
+        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        nameLabel.Parent = settingFrame
+        
+        local sliderFrame = Instance.new("Frame")
+        sliderFrame.Name = "SliderFrame"
+        sliderFrame.Size = UDim2.new(0.4, 0, 0.3, 0)
+        sliderFrame.Position = UDim2.new(0.45, 0, 0.35, 0)
+        sliderFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+        sliderFrame.BorderColor3 = Color3.fromRGB(255, 255, 0)
+        sliderFrame.Parent = settingFrame
+        
+        local sliderBar = Instance.new("Frame")
+        sliderBar.Name = "SliderBar"
+        local initialRatio = math.max(0, math.min(1, (initial - min) / (max - min)))
+        sliderBar.Size = UDim2.new(initialRatio, 0, 1, 0)
+        sliderBar.BackgroundColor3 = Color3.fromRGB(0, 128, 255)
+        sliderBar.BorderSizePixel = 0
+        sliderBar.Parent = sliderFrame
+        
+        local valueText = Instance.new("TextLabel")
+        valueText.Name = "ValueLabel"
+        valueText.Size = UDim2.new(0.15, 0, 0.8, 0)
+        valueText.Position = UDim2.new(0.86, 0, 0.1, 0)
+        valueText.BackgroundTransparency = 1
+        valueText.Font = Enum.Font.Code
+        valueText.TextSize = 14
+        valueText.TextColor3 = Color3.fromRGB(255, 255, 255)
+        valueText.Text = tostring(initial)
+        valueText.Parent = settingFrame
+        
+        local currentValue = initial
+        
+        sliderFrame.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                local connection
+                connection = game:GetService("RunService").RenderStepped:Connect(function()
+                    local mousePos = game:GetService("UserInputService"):GetMouseLocation()
+                    local framePos = sliderFrame.AbsolutePosition
+                    local frameSize = sliderFrame.AbsoluteSize
+                    
+                    local relativeX = math.clamp((mousePos.X - framePos.X) / frameSize.X, 0, 1)
+                    sliderBar.Size = UDim2.new(relativeX, 0, 1, 0)
+                    
+                    currentValue = math.floor(min + relativeX * (max - min))
+                    valueText.Text = tostring(currentValue)
+                    
+                    if callback then
+                        callback(currentValue)
+                    end
+                end)
+                
+                local endConnection
+                endConnection = game:GetService("UserInputService").InputEnded:Connect(function(endInput)
+                    if endInput.UserInputType == Enum.UserInputType.MouseButton1 then
+                        connection:Disconnect()
+                        endConnection:Disconnect()
+                    end
+                end)
+            end
+        end)
+        
+        -- Store reference for updating
+        if tabName then
+            tabSystem.elements[tabName][name] = {
+                type = "slider",
+                frame = settingFrame,
+                nameLabel = nameLabel,
+                sliderFrame = sliderFrame,
+                sliderBar = sliderBar,
+                valueText = valueText,
+                getValue = function() return currentValue end,
+                setValue = function(value)
+                    currentValue = math.max(min, math.min(max, value))
+                    local ratio = (currentValue - min) / (max - min)
+                    sliderBar.Size = UDim2.new(ratio, 0, 1, 0)
+                    valueText.Text = tostring(currentValue)
+                end,
+                min = min,
+                max = max
+            }
+        end
+        
+        return settingFrame, valueText
+    end
+
+    local function createDropdown(parent, name, options, initialOption, yPosition, callback, tabName)
+        local settingFrame = Instance.new("Frame")
+        settingFrame.Name = name:gsub(" ", "") .. "Dropdown"
+        settingFrame.Size = UDim2.new(1, -20, 0, 30)
+        settingFrame.Position = UDim2.new(0, 0, 0, yPosition)
+        settingFrame.BackgroundTransparency = 1
+        settingFrame.Parent = parent
+        
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Name = "NameLabel"
+        nameLabel.Size = UDim2.new(0.4, 0, 1, 0)
+        nameLabel.Position = UDim2.new(0, 0, 0, 0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Font = Enum.Font.Code
+        nameLabel.TextSize = 16
+        nameLabel.TextColor3 = Color3.fromRGB(0, 255, 255)
+        nameLabel.Text = name
+        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        nameLabel.Parent = settingFrame
+        
+        local dropdownButton = Instance.new("TextButton")
+        dropdownButton.Name = "DropdownButton"
+        dropdownButton.Size = UDim2.new(0.4, 0, 0.8, 0)
+        dropdownButton.Position = UDim2.new(0.45, 0, 0.1, 0)
+        dropdownButton.BackgroundColor3 = Color3.fromRGB(0, 0, 180)
+        dropdownButton.BorderColor3 = Color3.fromRGB(255, 255, 0)
+        dropdownButton.Font = Enum.Font.Code
+        dropdownButton.TextSize = 14
+        dropdownButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        dropdownButton.Text = initialOption
+        dropdownButton.Parent = settingFrame
+        
+        -- Create dropdown menu as a separate GUI element
+        local dropdownMenu = Instance.new("Frame")
+        dropdownMenu.Name = "DropdownMenu_" .. name:gsub(" ", "")
+        dropdownMenu.Size = UDim2.new(0.4, 0, 0, #options * 25)
+        dropdownMenu.BackgroundColor3 = Color3.fromRGB(0, 0, 100)
+        dropdownMenu.BorderColor3 = Color3.fromRGB(255, 255, 0)
+        dropdownMenu.Visible = false
+        dropdownMenu.ZIndex = 100
+        dropdownMenu.Parent = screenGui -- Parent to screenGui for better layering
+        
+        local currentSelection = initialOption
+        
+        -- Update dropdown menu position function
+        local function updateMenuPosition()
+            local buttonPos = dropdownButton.AbsolutePosition
+            local buttonSize = dropdownButton.AbsoluteSize
+            dropdownMenu.Position = UDim2.new(0, buttonPos.X, 0, buttonPos.Y + buttonSize.Y)
+        end
+        
+        for i, option in ipairs(options) do
+            local optionButton = Instance.new("TextButton")
+            optionButton.Name = option:gsub(" ", "") .. "Option"
+            optionButton.Size = UDim2.new(1, 0, 0, 25)
+            optionButton.Position = UDim2.new(0, 0, 0, (i-1) * 25)
+            optionButton.BackgroundColor3 = Color3.fromRGB(0, 0, 120)
+            optionButton.BorderSizePixel = 0
+            optionButton.Font = Enum.Font.Code
+            optionButton.TextSize = 14
+            optionButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+            optionButton.Text = option
+            optionButton.ZIndex = 101
+            optionButton.Parent = dropdownMenu
+            
+            optionButton.MouseEnter:Connect(function()
+                optionButton.BackgroundColor3 = Color3.fromRGB(0, 0, 180)
+            end)
+            
+            optionButton.MouseLeave:Connect(function()
+                optionButton.BackgroundColor3 = Color3.fromRGB(0, 0, 120)
+            end)
+            
+            optionButton.MouseButton1Click:Connect(function()
+                currentSelection = option
+                dropdownButton.Text = option
+                dropdownMenu.Visible = false
+                
+                if callback then
+                    callback(option)
+                end
+            end)
+        end
+        
+        dropdownButton.MouseButton1Click:Connect(function()
+            -- Close any other open dropdowns
+            for _, element in pairs(tabSystem.elements) do
+                for _, elemData in pairs(element) do
+                    if elemData.type == "dropdown" and elemData.menu and elemData.menu.Visible then
+                        elemData.menu.Visible = false
+                    end
+                end
+            end
+            
+            updateMenuPosition()
+            dropdownMenu.Visible = not dropdownMenu.Visible
+        end)
+        
+        -- Close dropdown when clicking outside
+        background.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                local mousePos = game:GetService("UserInputService"):GetMouseLocation()
+                local menuPos = dropdownMenu.AbsolutePosition
+                local menuSize = dropdownMenu.AbsoluteSize
+                local buttonPos = dropdownButton.AbsolutePosition
+                local buttonSize = dropdownButton.AbsoluteSize
+                
+                -- Check if click is outside both the dropdown button and menu
+                local isOutsideMenu = mousePos.X < menuPos.X or mousePos.X > menuPos.X + menuSize.X or 
+                                     mousePos.Y < menuPos.Y or mousePos.Y > menuPos.Y + menuSize.Y
+                local isOutsideButton = mousePos.X < buttonPos.X or mousePos.X > buttonPos.X + buttonSize.X or 
+                                       mousePos.Y < buttonPos.Y or mousePos.Y > buttonPos.Y + buttonSize.Y
+                
+                if isOutsideMenu and isOutsideButton and dropdownMenu.Visible then
+                    dropdownMenu.Visible = false
+                end
+            end
+        end)
+        
+        -- Store reference for updating
+        if tabName then
+            tabSystem.elements[tabName][name] = {
+                type = "dropdown",
+                frame = settingFrame,
+                nameLabel = nameLabel,
+                button = dropdownButton,
+                menu = dropdownMenu,
+                options = options,
+                getValue = function() return currentSelection end,
+                setValue = function(value)
+                    if table.find(options, value) then
+                        currentSelection = value
+                        dropdownButton.Text = value
+                    end
+                end,
+                setOptions = function(newOptions, newDefault)
+                    -- Clear existing options
+                    for _, child in pairs(dropdownMenu:GetChildren()) do
+                        child:Destroy()
+                    end
+                    
+                    -- Update menu size
+                    dropdownMenu.Size = UDim2.new(0.4, 0, 0, #newOptions * 25)
+                    
+                    -- Create new options
+                    for i, option in ipairs(newOptions) do
+                        local optionButton = Instance.new("TextButton")
+                        optionButton.Name = option:gsub(" ", "") .. "Option"
+                        optionButton.Size = UDim2.new(1, 0, 0, 25)
+                        optionButton.Position = UDim2.new(0, 0, 0, (i-1) * 25)
+                        optionButton.BackgroundColor3 = Color3.fromRGB(0, 0, 120)
+                        optionButton.BorderSizePixel = 0
+                        optionButton.Font = Enum.Font.Code
+                        optionButton.TextSize = 14
+                        optionButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+                        optionButton.Text = option
+                        optionButton.ZIndex = 101
+                        optionButton.Parent = dropdownMenu
+                        
+                        optionButton.MouseEnter:Connect(function()
+                            optionButton.BackgroundColor3 = Color3.fromRGB(0, 0, 180)
+                        end)
+                        
+                        optionButton.MouseLeave:Connect(function()
+                            optionButton.BackgroundColor3 = Color3.fromRGB(0, 0, 120)
+                        end)
+                        
+                        optionButton.MouseButton1Click:Connect(function()
+                            currentSelection = option
+                            dropdownButton.Text = option
+                            dropdownMenu.Visible = false
+                            
+                            if callback then
+                                callback(option)
+                            end
+                        end)
+                    end
+                    
+                    -- Update current selection
+                    if newDefault and table.find(newOptions, newDefault) then
+                        currentSelection = newDefault
+                        dropdownButton.Text = newDefault
+                    elseif #newOptions > 0 then
+                        currentSelection = newOptions[1]
+                        dropdownButton.Text = newOptions[1]
+                    else
+                        currentSelection = ""
+                        dropdownButton.Text = ""
+                    end
+                    
+                    -- Update stored options
+                    options = newOptions
+                end
+            }
+        end
+        
+        return settingFrame, dropdownButton, dropdownMenu
+    end
+    
+    -- Public API
+    local api = {
+        addTab = createTab,
+        
+        addLabel = function(tabName, text, yPos)
+            if tabSystem.tabContents[tabName] then
+                local label = createLabel(tabSystem.tabContents[tabName], text, yPos)
+                tabSystem.elements[tabName][text] = {
+                    type = "label",
+                    label = label,
+                    setText = function(newText)
+                        label.Text = newText
+                    end
+                }
+                return label
+            end
+        end,
+        
+        addSetting = function(tabName, settingName, value, yPos)
+            if tabSystem.tabContents[tabName] then
+                local frame, valueLabel = createSetting(tabSystem.tabContents[tabName], settingName, value, yPos, tabName)
+                return frame, valueLabel
+            end
+        end,
+        
+        addButton = function(tabName, buttonName, yPos, callback)
+            if tabSystem.tabContents[tabName] then
+                return createButton(tabSystem.tabContents[tabName], buttonName, yPos, callback, tabName)
+            end
+        end,
+        
+        addToggle = function(tabName, toggleName, initialValue, yPos, callback)
+            if tabSystem.tabContents[tabName] then
+                return createToggle(tabSystem.tabContents[tabName], toggleName, initialValue, yPos, callback, tabName)
+            end
+        end,
+        
+        addSlider = function(tabName, sliderName, min, max, initial, yPos, callback)
+            if tabSystem.tabContents[tabName] then
+                return createSlider(tabSystem.tabContents[tabName], sliderName, min, max, initial, yPos, callback, tabName)
+            end
+        end,
+        
+        addDropdown = function(tabName, dropdownName, options, initialOption, yPos, callback)
+            if tabSystem.tabContents[tabName] then
+                return createDropdown(tabSystem.tabContents[tabName], dropdownName, options, initialOption, yPos, callback, tabName)
+            end
+        end,
+        
+        updateCanvasSize = function(tabName)
+            if tabSystem.tabContents[tabName] then
+                local contentFrame = tabSystem.tabContents[tabName]
+                local maxY = 0
+                
+                for _, child in pairs(contentFrame:GetChildren()) do
+                    local childY = child.Position.Y.Offset + child.Size.Y.Offset
+                    if childY > maxY then
+                        maxY = childY
+                    end
+                end
+                
+                contentFrame.CanvasSize = UDim2.new(0, 0, 0, maxY + 20)
+            end
+        end,
+        
+        getValue = function(tabName, elementName)
+            if tabSystem.elements[tabName] and tabSystem.elements[tabName][elementName] then
+                local element = tabSystem.elements[tabName][elementName]
+                if element.getValue then
+                    return element.getValue()
+                end
+            end
+            return nil
+        end,
+        
+        setValue = function(tabName, elementName, value)
+            if tabSystem.elements[tabName] and tabSystem.elements[tabName][elementName] then
+                local element = tabSystem.elements[tabName][elementName]
+                if element.setValue then
+                    element.setValue(value)
+                end
+            end
+        end,
+        
+        close = function()
+            screenGui:Destroy()
+        end,
+        
+        -- Get a reference to the ScreenGui
+        getGui = function()
+            return screenGui
+        end,
+        
+        -- Get all elements for a tab
+        getElements = function(tabName)
+            return tabSystem.elements[tabName]
+        end,
+        
+        -- Get all data as a structured table
+        getData = function()
+            local data = {}
+            
+            for tabName, elements in pairs(tabSystem.elements) do
+                data[tabName] = {}
+                
+                for elementName, element in pairs(elements) do
+                    if element.getValue then
+                        data[tabName][elementName] = element.getValue()
+                    end
+                end
+            end
+            
+            return data
+        end,
+        
+        -- Load data from a structured table
+        loadData = function(data)
+            for tabName, tabData in pairs(data) do
+                if tabSystem.elements[tabName] then
+                    for elementName, value in pairs(tabData) do
+                        if tabSystem.elements[tabName][elementName] and tabSystem.elements[tabName][elementName].setValue then
+                            tabSystem.elements[tabName][elementName].setValue(value)
+                        end
+                    end
+                end
+            end
+        end,
+        
+        -- Set a custom theme
+        setTheme = function(theme)
+            theme = theme or {}
+            
+            -- Background colors
+            if theme.backgroundColor then
+                background.BackgroundColor3 = theme.backgroundColor
+                contentArea.BackgroundColor3 = theme.backgroundColor
+            end
+            
+            if theme.headerColor then
+                headerBar.BackgroundColor3 = theme.headerColor
+                tabsBar.BackgroundColor3 = theme.headerColor
+                footerBar.BackgroundColor3 = theme.headerColor
+            end
+            
+            -- Text colors
+            if theme.headerTextColor then
+                headerText.TextColor3 = theme.headerTextColor
+                footerText.TextColor3 = theme.headerTextColor
+            end
+            
+            if theme.labelTextColor then
+                for tabName, elements in pairs(tabSystem.elements) do
+                    for elementName, element in pairs(elements) do
+                        if element.type == "label" and element.label then
+                            element.label.TextColor3 = theme.labelTextColor
+                        elseif element.nameLabel then
+                            element.nameLabel.TextColor3 = theme.labelTextColor
+                        end
+                    end
+                end
+            end
+            
+            if theme.valueTextColor then
+                for tabName, elements in pairs(tabSystem.elements) do
+                    for elementName, element in pairs(elements) do
+                        if element.type == "setting" and element.valueLabel then
+                            element.valueLabel.TextColor3 = theme.valueTextColor
+                        end
+                    end
+                end
+            end
+            
+            -- Button colors
+            if theme.buttonColor then
+                for tabName, elements in pairs(tabSystem.elements) do
+                    for elementName, element in pairs(elements) do
+                        if element.type == "button" and element.button then
+                            element.button.BackgroundColor3 = theme.buttonColor
+                        elseif element.type == "dropdown" and element.button then
+                            element.button.BackgroundColor3 = theme.buttonColor
+                        end
+                    end
+                end
+            end
+            
+            -- Tab colors
+            if theme.tabColor then
+                for _, tab in pairs(tabSystem.tabs) do
+                    if tab.name ~= tabSystem.currentTab then
+                        tab.button.BackgroundColor3 = theme.tabColor
+                    end
+                end
+            end
+            
+            if theme.activeTabColor then
+                for _, tab in pairs(tabSystem.tabs) do
+                    if tab.name == tabSystem.currentTab then
+                        tab.button.BackgroundColor3 = theme.activeTabColor
+                    end
+                end
+            end
+            
+            -- Border colors
+            if theme.borderColor then
+                for tabName, elements in pairs(tabSystem.elements) do
+                    for elementName, element in pairs(elements) do
+                        if element.type == "button" and element.button then
+                            element.button.BorderColor3 = theme.borderColor
+                        elseif element.type == "dropdown" and element.button then
+                            element.button.BorderColor3 = theme.borderColor
+                            if element.menu then
+                                element.menu.BorderColor3 = theme.borderColor
+                            end
+                        elseif element.type == "slider" and element.sliderFrame then
+                            element.sliderFrame.BorderColor3 = theme.borderColor
+                        end
+                    end
+                end
+                
+                for _, tab in pairs(tabSystem.tabs) do
+                    tab.button.BorderColor3 = theme.borderColor
+                end
+            end
+        end
+    }
+    
+    -- Handle keyboard shortcuts
+    local keyboardHandler = function(input)
+        if input.KeyCode == Enum.KeyCode.F9 then
+            -- Load defaults (to be implemented by user)
+        elseif input.KeyCode == Enum.KeyCode.F10 then
+            -- Save and exit (to be implemented by user)
+        end
+    end
+    
+    game:GetService("UserInputService").InputBegan:Connect(keyboardHandler)
+    
+    -- Update canvas sizes for all tabs after creation
+    for _, tabData in pairs(tabSystem.tabs) do
+        api.updateCanvasSize(tabData.name)
+    end
+    
+    return api
+end
+
+-- Return the module
+return BIOSCreator
