@@ -1220,7 +1220,7 @@ local function Hide(notify: boolean?)
 	Debounce = false
 end
 
-local function Maximise()
+local function Maximise(
 	Debounce = true
 	Topbar.ChangeSize.Image = "rbxassetid://"..10137941941
 
