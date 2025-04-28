@@ -7,7 +7,7 @@ FOR TESTING PURPOSES NOT MINE!
 	iRay  | Programming
 	Max   | Programming
 
-]]
+]]--
 
 if debugX then
 	warn('Initialising Rayfield')
